@@ -1,4 +1,10 @@
-#include <bits/stdc++.h>
+#include <iostream>
+#include <map>
+#include <deque>
+#include <unordered_map>
+#include <sstream>
+#include <string>
+
 using namespace std;
 
 struct Order {
@@ -12,10 +18,14 @@ class OrderBook {
 
 private:
 
-    map<double, deque<Order>, greater<double>> bids;
-    map<double, deque<Order>> asks;
+    // BUY side (highest price first)
+    map<double, deque<Order>, greater<double> > bids;
 
-    unordered_map<string, pair<string,double>> orderIndex;
+    // SELL side (lowest price first)
+    map<double, deque<Order> > asks;
+
+    // Order lookup for cancellation
+    unordered_map<string, pair<string,double> > orderIndex;
 
 public:
 
@@ -31,7 +41,7 @@ public:
 
         while(order.quantity > 0 && !asks.empty()) {
 
-            auto bestAsk = asks.begin();
+            map<double, deque<Order> >::iterator bestAsk = asks.begin();
 
             if(order.price != 0 && bestAsk->first > order.price)
                 break;
@@ -44,7 +54,8 @@ public:
             int tradeQty = min(order.quantity, sellOrder.quantity);
             double tradePrice = bestAsk->first;
 
-            cout << "TRADE " << order.id << " "
+            cout << "TRADE "
+                 << order.id << " "
                  << sellOrder.id << " "
                  << tradePrice << " "
                  << tradeQty << endl;
@@ -62,10 +73,11 @@ public:
             }
         }
 
+        // Remaining quantity goes to book if LIMIT order
         if(order.quantity > 0 && order.price != 0) {
 
             bids[order.price].push_back(order);
-            orderIndex[order.id] = {"BUY", order.price};
+            orderIndex[order.id] = make_pair("BUY", order.price);
         }
     }
 
@@ -73,7 +85,7 @@ public:
 
         while(order.quantity > 0 && !bids.empty()) {
 
-            auto bestBid = bids.begin();
+            map<double, deque<Order>, greater<double> >::iterator bestBid = bids.begin();
 
             if(order.price != 0 && bestBid->first < order.price)
                 break;
@@ -86,7 +98,8 @@ public:
             int tradeQty = min(order.quantity, buyOrder.quantity);
             double tradePrice = bestBid->first;
 
-            cout << "TRADE " << buyOrder.id << " "
+            cout << "TRADE "
+                 << buyOrder.id << " "
                  << order.id << " "
                  << tradePrice << " "
                  << tradeQty << endl;
@@ -107,7 +120,7 @@ public:
         if(order.quantity > 0 && order.price != 0) {
 
             asks[order.price].push_back(order);
-            orderIndex[order.id] = {"SELL", order.price};
+            orderIndex[order.id] = make_pair("SELL", order.price);
         }
     }
 
@@ -116,13 +129,14 @@ public:
         if(orderIndex.find(id) == orderIndex.end())
             return;
 
-        auto [side, price] = orderIndex[id];
+        string side = orderIndex[id].first;
+        double price = orderIndex[id].second;
 
         if(side == "BUY") {
 
-            auto &dq = bids[price];
+            deque<Order> &dq = bids[price];
 
-            for(auto it = dq.begin(); it != dq.end(); it++) {
+            for(deque<Order>::iterator it = dq.begin(); it != dq.end(); it++) {
 
                 if(it->id == id) {
 
@@ -134,12 +148,11 @@ public:
             if(dq.empty())
                 bids.erase(price);
         }
-
         else {
 
-            auto &dq = asks[price];
+            deque<Order> &dq = asks[price];
 
-            for(auto it = dq.begin(); it != dq.end(); it++) {
+            for(deque<Order>::iterator it = dq.begin(); it != dq.end(); it++) {
 
                 if(it->id == id) {
 
@@ -161,14 +174,17 @@ public:
 
         int count = 0;
 
-        for(auto &[price, orders] : asks) {
+        for(map<double, deque<Order> >::iterator it = asks.begin(); it != asks.end(); it++) {
 
             if(count == 5) break;
 
+            double price = it->first;
+            deque<Order> &orders = it->second;
+
             int total = 0;
 
-            for(auto &o : orders)
-                total += o.quantity;
+            for(size_t i = 0; i < orders.size(); i++)
+                total += orders[i].quantity;
 
             cout << "ASK: " << price << " x " << total << endl;
 
@@ -180,14 +196,17 @@ public:
 
         count = 0;
 
-        for(auto &[price, orders] : bids) {
+        for(map<double, deque<Order>, greater<double> >::iterator it = bids.begin(); it != bids.end(); it++) {
 
             if(count == 5) break;
 
+            double price = it->first;
+            deque<Order> &orders = it->second;
+
             int total = 0;
 
-            for(auto &o : orders)
-                total += o.quantity;
+            for(size_t i = 0; i < orders.size(); i++)
+                total += orders[i].quantity;
 
             cout << "BID: " << price << " x " << total << endl;
 
@@ -202,7 +221,6 @@ public:
 int main() {
 
     OrderBook book;
-
     string line;
 
     while(getline(cin, line)) {
@@ -211,7 +229,6 @@ int main() {
             continue;
 
         stringstream ss(line);
-
         string first;
 
         ss >> first;
@@ -223,13 +240,11 @@ int main() {
 
             book.cancelOrder(id);
         }
-
         else {
 
             Order order;
 
             order.id = first;
-
             ss >> order.side >> order.price >> order.quantity;
 
             book.processOrder(order);
